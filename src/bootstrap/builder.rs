@@ -719,28 +719,19 @@ impl<'a> Builder<'a> {
             _ => self.stage_out(compiler, mode),
         };
 
-        // This is for the original compiler, but if we're forced to use stage 1, then
-        // std/test/rustc stamps won't exist in stage 2, so we need to get those from stage 1, since
-        // we copy the libs forward.
-        let cmp = if self.force_use_stage1(compiler, target) {
-            self.compiler(1, compiler.host)
-        } else {
-            compiler
-        };
-
         let libstd_stamp = match cmd {
-            "check" => check::libstd_stamp(self, cmp, target),
-            _ => compile::libstd_stamp(self, cmp, target),
+            "check" => check::libstd_stamp(self, compiler, target),
+            _ => compile::libstd_stamp(self, compiler, target),
         };
 
         let libtest_stamp = match cmd {
-            "check" => check::libtest_stamp(self, cmp, target),
-            _ => compile::libstd_stamp(self, cmp, target),
+            "check" => check::libtest_stamp(self, compiler, target),
+            _ => compile::libstd_stamp(self, compiler, target),
         };
 
         let librustc_stamp = match cmd {
-            "check" => check::librustc_stamp(self, cmp, target),
-            _ => compile::librustc_stamp(self, cmp, target),
+            "check" => check::librustc_stamp(self, compiler, target),
+            _ => compile::librustc_stamp(self, compiler, target),
         };
 
         if cmd == "doc" {
@@ -764,9 +755,7 @@ impl<'a> Builder<'a> {
                     self.clear_if_dirty(&my_out, &libtest_stamp);
                 },
                 Mode::Codegen => {
-                    self.clear_if_dirty(&my_out, &self.rustc(compiler));
-                    self.clear_if_dirty(&my_out, &libstd_stamp);
-                    self.clear_if_dirty(&my_out, &libtest_stamp);
+                    self.clear_if_dirty(&my_out, &librustc_stamp);
                 },
                 Mode::ToolBootstrap => { },
                 Mode::ToolStd => {

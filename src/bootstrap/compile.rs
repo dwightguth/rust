@@ -225,7 +225,7 @@ impl Step for StdLink {
     /// output directory.
     fn run(self, builder: &Builder) {
         let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
+        let mut target_compiler = self.target_compiler;
         let target = self.target;
         builder.info(&format!("Copying stage{} std from stage{} ({} -> {} / {})",
                 target_compiler.stage,
@@ -242,6 +242,13 @@ impl Step for StdLink {
             // for reason why the sanitizers are not built in stage0.
             copy_apple_sanitizer_dylibs(builder, &builder.native_dir(target), "osx", &libdir);
         }
+
+        // This is for the original compiler, but if we're forced to use stage 1, then
+        // std/test/rustc stamps won't exist in stage 2, so we need to get those from stage 1, since
+        // we copy the libs forward.
+        if builder.force_use_stage1(target_compiler, target) {
+            target_compiler = builder.compiler(1, target_compiler.host)
+        };
 
         builder.cargo(target_compiler, Mode::ToolStd, target, "clean");
     }
@@ -429,7 +436,7 @@ impl Step for TestLink {
     /// Same as `std_link`, only for libtest
     fn run(self, builder: &Builder) {
         let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
+        let mut target_compiler = self.target_compiler;
         let target = self.target;
         builder.info(&format!("Copying stage{} test from stage{} ({} -> {} / {})",
                 target_compiler.stage,
@@ -439,6 +446,13 @@ impl Step for TestLink {
                 target));
         add_to_sysroot(builder, &builder.sysroot_libdir(target_compiler, target),
                     &libtest_stamp(builder, compiler, target));
+
+        // This is for the original compiler, but if we're forced to use stage 1, then
+        // std/test/rustc stamps won't exist in stage 2, so we need to get those from stage 1, since
+        // we copy the libs forward.
+        if builder.force_use_stage1(target_compiler, target) {
+            target_compiler = builder.compiler(1, target_compiler.host)
+        };
 
         builder.cargo(target_compiler, Mode::ToolTest, target, "clean");
     }
@@ -588,7 +602,7 @@ impl Step for RustcLink {
     /// Same as `std_link`, only for librustc
     fn run(self, builder: &Builder) {
         let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
+        let mut target_compiler = self.target_compiler;
         let target = self.target;
         builder.info(&format!("Copying stage{} rustc from stage{} ({} -> {} / {})",
                  target_compiler.stage,
@@ -598,6 +612,14 @@ impl Step for RustcLink {
                  target));
         add_to_sysroot(builder, &builder.sysroot_libdir(target_compiler, target),
                        &librustc_stamp(builder, compiler, target));
+
+        // This is for the original compiler, but if we're forced to use stage 1, then
+        // std/test/rustc stamps won't exist in stage 2, so we need to get those from stage 1, since
+        // we copy the libs forward.
+        if builder.force_use_stage1(target_compiler, target) {
+            target_compiler = builder.compiler(1, target_compiler.host)
+        };
+
         builder.cargo(target_compiler, Mode::ToolRustc, target, "clean");
     }
 }
@@ -655,7 +677,6 @@ impl Step for CodegenBackend {
         }
 
         let out_dir = builder.cargo_out(compiler, Mode::Codegen, target);
-        builder.clear_if_dirty(&out_dir, &librustc_stamp(builder, compiler, target));
 
         let mut cargo = builder.cargo(compiler, Mode::Codegen, target, "rustc");
         cargo.arg("--manifest-path")

@@ -132,9 +132,6 @@ impl Step for CodegenBackend {
         let target = self.target;
         let backend = self.backend;
 
-        let out_dir = builder.cargo_out(compiler, Mode::Codegen, target);
-        builder.clear_if_dirty(&out_dir, &librustc_stamp(builder, compiler, target));
-
         let mut cargo = builder.cargo(compiler, Mode::Codegen, target, "check");
         cargo.arg("--manifest-path").arg(builder.src.join("src/librustc_codegen_llvm/Cargo.toml"));
         rustc_cargo_env(builder, &mut cargo);
@@ -210,13 +207,8 @@ impl Step for Rustdoc {
     }
 
     fn run(self, builder: &Builder) {
-        let compiler = builder.compiler(0, builder.config.build);
+        let mut compiler = builder.compiler(0, builder.config.build);
         let target = self.target;
-
-        let stage_out = builder.stage_out(compiler, Mode::ToolRustc);
-        builder.clear_if_dirty(&stage_out, &libstd_stamp(builder, compiler, target));
-        builder.clear_if_dirty(&stage_out, &libtest_stamp(builder, compiler, target));
-        builder.clear_if_dirty(&stage_out, &librustc_stamp(builder, compiler, target));
 
         let mut cargo = prepare_tool_cargo(builder,
                                            compiler,
@@ -236,6 +228,14 @@ impl Step for Rustdoc {
 
         let libdir = builder.sysroot_libdir(compiler, target);
         add_to_sysroot(&builder, &libdir, &rustdoc_stamp(builder, compiler, target));
+
+        // This is for the original compiler, but if we're forced to use stage 1, then
+        // std/test/rustc stamps won't exist in stage 2, so we need to get those from stage 1, since
+        // we copy the libs forward.
+        if builder.force_use_stage1(compiler, target) {
+            compiler = builder.compiler(1, compiler.host)
+        };
+
         builder.cargo(compiler, Mode::ToolRustc, target, "clean");
     }
 }
