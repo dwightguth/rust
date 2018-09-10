@@ -708,6 +708,71 @@ impl<'a> Builder<'a> {
     ) -> Command {
         let mut cargo = Command::new(&self.initial_cargo);
         let out_dir = self.stage_out(compiler, mode);
+
+        // command specific path, we call clear_if_dirty with this
+        let mut my_out = match cmd {
+            "build" => self.cargo_out(compiler, mode, target),
+
+            // This is the intended out directory for crate documentation.
+            "doc" =>  self.crate_doc_out(target),
+
+            _ => self.stage_out(compiler, mode),
+        };
+
+        let libstd_stamp = match cmd {
+            "check" => check::libstd_stamp(self, compiler, target),
+            _ => compile::libstd_stamp(self, compiler, target),
+        };
+
+        let libtest_stamp = match cmd {
+            "check" => check::libtest_stamp(self, compiler, target),
+            _ => compile::libstd_stamp(self, compiler, target),
+        };
+
+        let librustc_stamp = match cmd {
+            "check" => check::librustc_stamp(self, compiler, target),
+            _ => compile::librustc_stamp(self, compiler, target),
+        };
+
+        if cmd == "doc" {
+            if mode == Mode::Rustc || mode == Mode::ToolRustc || mode == Mode::Codegen {
+                // This is the intended out directory for compiler documentation.
+                my_out = self.compiler_doc_out(target);
+            }
+            let rustdoc = self.rustdoc(compiler.host);
+            self.clear_if_dirty(&my_out, &rustdoc);
+        } else {
+            match mode {
+                Mode::Std => {
+                    self.clear_if_dirty(&my_out, &self.rustc(compiler));
+                },
+                Mode::Test => {
+                    self.clear_if_dirty(&my_out, &libstd_stamp);
+                },
+                Mode::Rustc => {
+                    self.clear_if_dirty(&my_out, &self.rustc(compiler));
+                    self.clear_if_dirty(&my_out, &libstd_stamp);
+                    self.clear_if_dirty(&my_out, &libtest_stamp);
+                },
+                Mode::Codegen => {
+                    self.clear_if_dirty(&my_out, &librustc_stamp);
+                },
+                Mode::ToolBootstrap => { },
+                Mode::ToolStd => {
+                    self.clear_if_dirty(&my_out, &libstd_stamp);
+                },
+                Mode::ToolTest => {
+                    self.clear_if_dirty(&my_out, &libstd_stamp);
+                    self.clear_if_dirty(&my_out, &libtest_stamp);
+                },
+                Mode::ToolRustc => {
+                    self.clear_if_dirty(&my_out, &libstd_stamp);
+                    self.clear_if_dirty(&my_out, &libtest_stamp);
+                    self.clear_if_dirty(&my_out, &librustc_stamp);
+                },
+            }
+        }
+
         cargo
             .env("CARGO_TARGET_DIR", out_dir)
             .arg(cmd);
